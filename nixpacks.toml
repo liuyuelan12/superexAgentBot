@@ -3,13 +3,13 @@ nixPkgs = ["python313", "gcc"]
 
 [phases.install]
 cmds = [
-  "python -m ensurepip --upgrade",
-  "python -m pip install --upgrade pip",
-  "python -m pip install -r requirements.txt",
+  "python -m venv --copies /opt/venv",
+  "/opt/venv/bin/pip install --upgrade pip",
+  "/opt/venv/bin/pip install -r requirements.txt",
 ]
 
 [start]
-cmd = "python main.py"
+cmd = "/opt/venv/bin/python main.py"
 
 [variables]
 PYTHONUNBUFFERED = "1"
