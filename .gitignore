@@ -1,0 +1,31 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets (never commit)
+.env
+.env.local
+.env.*.local
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Runtime logs (per-deploy, do not version)
+data/qa_log.jsonl
+
+# Keep index artifacts so Railway can start without rebuilding:
+#   data/chroma/
+#   data/bm25.pkl
+#   data/index_meta.json
