@@ -161,6 +161,19 @@ class AskHandler:
         top_vec = hits[0].vec_sim if hits else 0.0
         top_score = hits[0].score if hits else 0.0
 
+        logger.info(
+            "ask trigger=%s lang=%s top_vec=%.3f q=%r rew=%r hits=%s",
+            triggered_by,
+            decision.lang,
+            top_vec,
+            query[:120],
+            (decision.rewritten_query or "")[:120],
+            [
+                f"{h.basename()[:30]}|sec={h.section[:25]}|{h.lang}|s={h.score:.2f}/v={h.vec_sim:.2f}"
+                for h in hits[:5]
+            ],
+        )
+
         record = {
             "ts": int(time.time()),
             "chat_id": msg.chat.id,
