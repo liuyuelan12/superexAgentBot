@@ -153,11 +153,24 @@ class AskHandler:
             decision = await route(self._llm, query, history, assume_question=True)
 
         start = time.monotonic()
-        hits = self._retriever.search(
-            decision.rewritten_query or query,
-            top_k=TOP_K,
-            lang_boost=decision.lang,
+        # Dual retrieval: original query + router-rewritten. Merge by doc_id keeping max score.
+        # Insurance against router LLM that over-translates and loses original-language keywords.
+        hits_orig = self._retriever.search(
+            query, top_k=TOP_K, lang_boost=decision.lang
         )
+        hits_rew: list = []
+        if decision.rewritten_query and decision.rewritten_query.strip() != query.strip():
+            hits_rew = self._retriever.search(
+                decision.rewritten_query,
+                top_k=TOP_K,
+                lang_boost=decision.lang,
+            )
+        merged: dict = {}
+        for h in hits_orig + hits_rew:
+            existing = merged.get(h.doc_id)
+            if existing is None or existing.score < h.score:
+                merged[h.doc_id] = h
+        hits = sorted(merged.values(), key=lambda h: -h.score)[:TOP_K]
         top_vec = hits[0].vec_sim if hits else 0.0
         top_score = hits[0].score if hits else 0.0
 

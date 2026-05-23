@@ -25,8 +25,17 @@ Return a single JSON object with these keys and nothing else:
 {{
   "is_question": <bool>,
   "lang": "<ISO-639-1 code, e.g. en, zh, fa, ru>",
-  "rewritten_query": "<standalone search query in English plus 1-3 original-language keywords>"
+  "rewritten_query": "<see rules below>"
 }}
+
+Rules for rewritten_query (CRITICAL):
+- KEEP every original-language noun/keyword verbatim. Do NOT translate or replace them.
+- APPEND 1-4 English equivalents at the end, separated by spaces.
+- Drop filler words ("how do I", "请问", "可以告诉我吗"), keep only nouns and verbs.
+- Example: user "如何参与理财？如何提现？" → "理财 提现 投资 financial product withdraw withdrawal"
+- Example: user "چگونه واریز کنم" → "واریز deposit"
+- Example: user "what is funding rate" → "funding rate"
+- NEVER output only English when the user wrote in another language.
 
 is_question = true iff the message is asking about SuperEx, a cryptocurrency exchange, trading, deposit/withdrawal, KYC, or related operational topics.
 is_question = false for greetings, jokes, prices, off-topic chat, unrelated questions.
