@@ -47,17 +47,19 @@ User message:
 {text}
 """
 
+_SUPPORT_BOT = "@SuperEx_Zendesk_Bot"
+
 REFUSAL_TEMPLATES: dict[str, str] = {
-    "zh": "暂无相关资料，请联系人工客服 ✉️",
-    "zh-CN": "暂无相关资料，请联系人工客服 ✉️",
-    "zh-TW": "暫無相關資料，請聯絡人工客服 ✉️",
-    "en": "I don't have information on that yet. Please contact human support ✉️",
-    "ru": "У меня пока нет информации по этому вопросу. Пожалуйста, свяжитесь со службой поддержки ✉️",
-    "fa": "در حال حاضر اطلاعاتی در این مورد ندارم. لطفاً با پشتیبانی انسانی تماس بگیرید ✉️",
-    "uk": "Наразі я не маю інформації з цього питання. Будь ласка, зверніться до служби підтримки ✉️",
-    "vi": "Hiện tại tôi chưa có thông tin về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ ✉️",
-    "es": "Aún no tengo información sobre eso. Por favor, contacta con el soporte humano ✉️",
-    "fr": "Je n'ai pas encore d'informations à ce sujet. Veuillez contacter le support humain ✉️",
+    "zh": f"暂无相关资料,请私信 {_SUPPORT_BOT} 开工单联系客服 ✉️",
+    "zh-CN": f"暂无相关资料,请私信 {_SUPPORT_BOT} 开工单联系客服 ✉️",
+    "zh-TW": f"暫無相關資料,請私訊 {_SUPPORT_BOT} 開工單聯絡客服 ✉️",
+    "en": f"I don't have information on that yet. Please DM {_SUPPORT_BOT} to open a support ticket ✉️",
+    "ru": f"У меня пока нет информации по этому вопросу. Напишите в личные сообщения {_SUPPORT_BOT}, чтобы открыть тикет поддержки ✉️",
+    "fa": f"در حال حاضر اطلاعاتی در این مورد ندارم. لطفاً به {_SUPPORT_BOT} پیام خصوصی دهید تا تیکت پشتیبانی باز کنید ✉️",
+    "uk": f"Наразі я не маю інформації з цього питання. Напишіть у приватні повідомлення {_SUPPORT_BOT}, щоб відкрити тикет підтримки ✉️",
+    "vi": f"Hiện tại tôi chưa có thông tin về vấn đề này. Vui lòng nhắn tin riêng cho {_SUPPORT_BOT} để mở ticket hỗ trợ ✉️",
+    "es": f"Aún no tengo información sobre eso. Por favor envía un mensaje privado a {_SUPPORT_BOT} para abrir un ticket de soporte ✉️",
+    "fr": f"Je n'ai pas encore d'informations à ce sujet. Veuillez envoyer un message privé à {_SUPPORT_BOT} pour ouvrir un ticket de support ✉️",
 }
 
 
