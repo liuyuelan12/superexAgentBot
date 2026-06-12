@@ -58,6 +58,20 @@ def _load_customer_service(root: Path) -> list[Document]:
             docs.extend(
                 load_customer_service_csv(csv_path, relpath(csv_path, REPO_ROOT))
             )
+    supplement_dir = root / "补充"
+    if supplement_dir.exists():
+        for md in supplement_dir.rglob("*.md"):
+            text = md.read_text(encoding="utf-8", errors="ignore")
+            docs.extend(
+                split_markdown_header_aware(
+                    text=text,
+                    source=relpath(md, REPO_ROOT),
+                    lang="zh-CN",
+                    doc_type="cs_faq",
+                    max_tokens=CHUNK_SIZE_TOKENS,
+                    overlap_tokens=CHUNK_OVERLAP_TOKENS,
+                )
+            )
     return docs
 
 

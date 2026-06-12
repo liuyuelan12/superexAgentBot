@@ -1,13 +1,15 @@
 {
-  "built_at": 1779485046,
+  "built_at": 1781227253,
   "sources": [
     "raw_customer_service",
     "raw_official_tutorial",
     "wiki"
   ],
-  "doc_count": 491,
+  "doc_count": 538,
   "files": {
     "/Users/ericc/Desktop/SuperEx/raw/客服/bitget/喂AI文档.md": "1b58f8a46c052dfd3191db6f31fd170123f5b190",
+    "/Users/ericc/Desktop/SuperEx/raw/客服/补充/customer-support-supplement.md": "69cb9a5fc16da9dd9982b949cb5bc592ca448454",
+    "/Users/ericc/Desktop/SuperEx/raw/客服/补充/kb_gap_filled.csv": "13f2521a38438f2bbe606266dff9d6d958479ed2",
     "/Users/ericc/Desktop/SuperEx/raw/客服/superex/客服话术整理 - 官方社群文案翻译.csv": "90198b81e1d3e6f64367fe9276d9cdfa3e7d99d6",
     "/Users/ericc/Desktop/SuperEx/raw/官方教程/全币种合约/index_futures_tutorial.html": "207f3351171ede096cd585b7ec970fc2b197f271",
     "/Users/ericc/Desktop/SuperEx/raw/官方教程/体验金/合约体验金新增使用场景.md": "91060cf49df337180a0f9a39832fc360857958d3",
@@ -87,6 +89,7 @@
     "/Users/ericc/Desktop/SuperEx/wiki/concepts/mechanism-liquidation.md": "e31492599f799543394b2f45c67460b60f4722dc",
     "/Users/ericc/Desktop/SuperEx/wiki/concepts/mechanism-funding-fee.md": "10a2baf8bd404982d021c3ee0cc3848d4051e4b2",
     "/Users/ericc/Desktop/SuperEx/wiki/concepts/mechanism-2fa.md": "079ecf0dfb1c1dad464259c8abeaacd1d12f2996",
+    "/Users/ericc/Desktop/SuperEx/wiki/concepts/mechanism-experience-fund.md": "5f036ff23e6668879a1a99e199f183f0f55885ef",
     "/Users/ericc/Desktop/SuperEx/wiki/concepts/selling-points.md": "3a9f3e1136c5106c181bd02cb2ff3e22467d5a3c",
     "/Users/ericc/Desktop/SuperEx/wiki/concepts/mechanism-bonus-deduction.md": "8e4ebb5f32656a12310bf3e4610a40f46c0e92ca",
     "/Users/ericc/Desktop/SuperEx/wiki/ops/new-token-search.md": "2f848d925a0e13124d76d7b7a2a62ea10927e3fe",
