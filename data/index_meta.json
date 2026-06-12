@@ -1,11 +1,11 @@
 {
-  "built_at": 1781231555,
+  "built_at": 1781233306,
   "sources": [
     "raw_customer_service",
     "raw_official_tutorial",
     "wiki"
   ],
-  "doc_count": 567,
+  "doc_count": 471,
   "files": {
     "/Users/ericc/Desktop/SuperEx/raw/客服/bitget/喂AI文档.md": "1b58f8a46c052dfd3191db6f31fd170123f5b190",
     "/Users/ericc/Desktop/SuperEx/raw/客服/补充/customer-support-supplement.md": "69cb9a5fc16da9dd9982b949cb5bc592ca448454",

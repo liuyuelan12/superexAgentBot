@@ -28,6 +28,34 @@ from .pdf_extract import extract_pdf_pages
 
 logger = logging.getLogger(__name__)
 
+# Sources whose content is overridden by a newer authoritative document and
+# must NOT be indexed. Paths are RELATIVE to REPO_ROOT, using POSIX separators.
+# Each entry should cite the canonical replacement so future-you knows why.
+#
+# 体验金(Futures Bonus): superex-bonus.md is the official spec
+# (Google Doc 1yRviP0AkxfYOXOMxKUj0qVNOhvpznyg-O5UlZjimWAM, 2026-06).
+# The following are PRD-era drafts or wiki pages derived from those drafts
+# and conflict with the final ruleset (e.g. "PRD 中已划掉" markers).
+_KB_EXCLUDE_RELPATHS: frozenset[str] = frozenset(
+    {
+        "raw/官方教程/体验金/合约体验金新增使用场景.md",
+        "wiki/concepts/mechanism-bonus-deduction.md",
+        "wiki/concepts/mechanism-experience-fund.md",
+        "wiki/entities/product-futures-bonus.md",
+        "wiki/faq/faq-futures-bonus.md",
+        "wiki/workflows/bonus-activate-and-use.md",
+    }
+)
+
+
+def _is_excluded(path: Path) -> bool:
+    try:
+        rel = path.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return False
+    return rel in _KB_EXCLUDE_RELPATHS
+
+
 # Heuristic language tags by path component.
 _LANG_HINTS: tuple[tuple[str, str], ...] = (
     ("/英文/", "en"),
@@ -81,6 +109,9 @@ def _load_official_tutorial(root: Path) -> list[Document]:
         return docs
 
     for md in root.rglob("*.md"):
+        if _is_excluded(md):
+            logger.info("Skipping excluded source: %s", relpath(md, REPO_ROOT))
+            continue
         text = md.read_text(encoding="utf-8", errors="ignore")
         docs.extend(
             split_markdown_header_aware(
@@ -156,6 +187,9 @@ def _load_wiki(root: Path) -> list[Document]:
         return docs
     for md in root.rglob("*.md"):
         if md.name.startswith("lint-report"):
+            continue
+        if _is_excluded(md):
+            logger.info("Skipping excluded source: %s", relpath(md, REPO_ROOT))
             continue
         text = md.read_text(encoding="utf-8", errors="ignore")
         frontmatter, body = _parse_frontmatter(text)
