@@ -6,6 +6,7 @@ import csv
 import logging
 from pathlib import Path
 
+from .chunker import is_link_only
 from .document import Document
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ def load_customer_service_csv(path: Path, source_label: str) -> list[Document]:
                             "group_id": group_id,
                             "category": category,
                             "topic": topic,
+                            "link_only": is_link_only(text),
                         },
                     )
                 )

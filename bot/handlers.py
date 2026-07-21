@@ -9,7 +9,8 @@ import time
 from typing import Optional
 
 from telegram import Message, Update
-from telegram.constants import ChatAction, ChatType
+from telegram.constants import ChatAction, ChatType, ParseMode
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from config import (
@@ -17,7 +18,7 @@ from config import (
     MAX_CTX_TURNS,
     QA_LOG_PATH,
     SIM_THRESHOLD,
-    TELEGRAM_MAX_MESSAGE_LEN,
+    TELEGRAM_SPLIT_LEN,
     TOP_K,
     RuntimeConfig,
 )
@@ -27,6 +28,7 @@ from llm.prompts import SYSTEM_ANSWER, refusal_for
 
 from .context import build_history
 from .router import RouterDecision, route
+from .telegram_format import md_to_telegram_html, split_for_telegram, strip_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -78,30 +80,41 @@ def _format_hit_paths(hits: list[Hit]) -> list[dict]:
     ]
 
 
+async def _send_formatted(msg: Message, markdown: str, suffix: str = "") -> None:
+    """Render one chunk as Telegram HTML, degrading to plain text on any failure.
+
+    A formatting bug must never swallow an answer, so both the conversion and the
+    send are guarded and fall back to stripped plain text.
+    """
+    try:
+        html = md_to_telegram_html(markdown)
+    except Exception:  # noqa: BLE001
+        logger.exception("markdown->html conversion crashed; sending raw text")
+        await msg.reply_text(markdown + suffix, disable_web_page_preview=True)
+        return
+    try:
+        await msg.reply_text(
+            html + suffix,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )
+    except BadRequest as exc:
+        logger.warning("Telegram rejected HTML (%s); falling back to plain text", exc)
+        await msg.reply_text(
+            strip_markdown(markdown) + suffix, disable_web_page_preview=True
+        )
+
+
 async def _reply_long(msg: Message, text: str) -> None:
-    text = text.strip()
-    if not text:
+    # Split the markdown source, not the rendered HTML, so no tag is ever cut in
+    # half; each part is converted and tag-balanced independently.
+    parts = split_for_telegram(text, TELEGRAM_SPLIT_LEN)
+    if not parts:
         return
-    if len(text) <= TELEGRAM_MAX_MESSAGE_LEN:
-        await msg.reply_text(text, disable_web_page_preview=True)
-        return
-    parts: list[str] = []
-    remaining = text
-    while remaining:
-        cut = remaining[:TELEGRAM_MAX_MESSAGE_LEN]
-        if len(remaining) > TELEGRAM_MAX_MESSAGE_LEN:
-            split_at = cut.rfind("\n\n")
-            if split_at < TELEGRAM_MAX_MESSAGE_LEN // 2:
-                split_at = cut.rfind("\n")
-            if split_at < TELEGRAM_MAX_MESSAGE_LEN // 2:
-                split_at = cut.rfind(" ")
-            if split_at > 0:
-                cut = remaining[:split_at]
-        parts.append(cut.rstrip())
-        remaining = remaining[len(cut):].lstrip()
     total = len(parts)
     for i, part in enumerate(parts, 1):
-        await msg.reply_text(f"{part}\n\n({i}/{total})", disable_web_page_preview=True)
+        suffix = f"\n\n({i}/{total})" if total > 1 else ""
+        await _send_formatted(msg, part, suffix)
 
 
 def _log_qa(record: dict) -> None:

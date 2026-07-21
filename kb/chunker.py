@@ -14,6 +14,47 @@ NUMBERED_QA = re.compile(r"^(\d+)\\?\.\s+", re.MULTILINE)
 H2_SPLIT = re.compile(r"\n(?=##\s+)")
 CJK_RANGE = re.compile(r"[一-鿿㐀-䶿]")
 
+# ── "see this link" stub detection ─────────────────────────────────────────────
+# Some KB sections are just a heading plus a URL ("VIP 等级和手续费折扣 / 请参考以下
+# 链接：…"). They match support questions lexically but answer nothing, so they
+# crowd real content out of TOP_K. Flagging them lets the retriever demote them.
+_URL_RE = re.compile(r"https?://\S+")
+_HEADING_LINE_RE = re.compile(r"^\s{0,3}#{1,6}\s.*$", re.MULTILINE)
+_BUTTON_RE = re.compile(r"【[^】]*】")
+_REFERRAL_PHRASES = (
+    "请参考以下链接",
+    "详情请查看以下链接",
+    "请查看以下链接",
+    "请参考",
+    "详情请查看",
+    "详见",
+    "立即了解",
+    "点击以下链接",
+    "如下链接",
+    "see the following link",
+    "please refer to",
+)
+# Calibrated against the real 472-chunk corpus by sweeping the threshold:
+#   25 chars -> "## 费用 / ### VIP 等级和手续费折扣 / 请参考以下链接：…"   (stub, want to catch)
+#   32 chars -> "### 返佣 / 推荐返佣怎么算 / 请参考以下链接：…"              (stub, want to catch)
+#   43 chars -> "如何注册帳戶（網頁端）" full tutorial step                  (real, must NOT catch)
+# 40 sits in that gap with a small margin. Raising it past 43 starts flagging
+# sections that genuinely answer something — re-run the sweep before changing.
+_LINK_ONLY_RESIDUE_CHARS = 40
+
+
+def is_link_only(text: str) -> bool:
+    """True when a chunk carries a URL but essentially no answer of its own."""
+    if not _URL_RE.search(text) and "【" not in text:
+        return False
+    residue = _HEADING_LINE_RE.sub("", text)
+    residue = _URL_RE.sub("", residue)
+    residue = _BUTTON_RE.sub("", residue)
+    for phrase in _REFERRAL_PHRASES:
+        residue = residue.replace(phrase, "")
+    residue = re.sub(r"[\s:：，。,.、\-—_|*#>()（）]+", "", residue)
+    return len(residue) < _LINK_ONLY_RESIDUE_CHARS
+
 
 def _estimate_tokens(text: str) -> int:
     """Rough token estimator that works across languages without tiktoken's vocab bias."""
@@ -83,6 +124,7 @@ def split_markdown_header_aware(
                     lang=lang,
                     type=doc_type,
                     section=section_name,
+                    extras={"link_only": is_link_only(sec)},
                 )
             )
         else:
@@ -94,6 +136,7 @@ def split_markdown_header_aware(
                         lang=lang,
                         type=doc_type,
                         section=section_name,
+                        extras={"link_only": is_link_only(piece)},
                     )
                 )
     if not docs and text.strip():

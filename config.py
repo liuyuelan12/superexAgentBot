@@ -45,6 +45,17 @@ ROUTER_MODEL = "llama-3.1-8b-instant"
 DEEPSEEK_MODEL = "deepseek-chat"
 
 TELEGRAM_MAX_MESSAGE_LEN = 4000
+# Split the markdown source below the hard limit: converting to HTML adds tags,
+# so a 4000-char source can exceed Telegram's 4096-char ceiling once rendered.
+TELEGRAM_SPLIT_LEN = 3500
+
+# Retrieval scoring. Chunks whose body is just "see this link" match support
+# questions lexically but answer nothing, so they must not crowd out real
+# content — the penalty demotes them without hiding them entirely.
+LINK_ONLY_PENALTY = 0.6
+# Social-media marketing copy is not a support answer; damp it below the FAQ
+# and tutorial sources. Types not listed here default to 1.0.
+DOC_TYPE_WEIGHTS: dict[str, float] = {"cs-script": 0.85}
 
 ENABLE_WEAK_TRIGGER = False  # P0: off; P1: on
 

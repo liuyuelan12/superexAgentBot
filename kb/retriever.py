@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import pickle
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,8 +13,10 @@ from config import (
     BM25_PATH,
     CHROMA_COLLECTION,
     CHROMA_DIR,
+    DOC_TYPE_WEIGHTS,
     EMBED_MODEL_NAME,
     HYBRID_VECTOR_WEIGHT,
+    LINK_ONLY_PENALTY,
     TOP_K,
 )
 
@@ -36,6 +39,72 @@ class Hit:
 
     def basename(self) -> str:
         return self.source.rsplit("/", 1)[-1]
+
+
+_WS_RE = re.compile(r"\s+")
+
+
+def _dedup_key(text: str) -> str:
+    """Collapse whitespace/case so translations that are byte-identical fold together."""
+    return _WS_RE.sub("", text).lower()
+
+
+def score_pool(
+    pool: dict[str, dict[str, Any]],
+    *,
+    lang_boost: str | None,
+    top_k: int,
+) -> list[Hit]:
+    """Blend vector + BM25 scores, apply quality weights, dedup, and truncate.
+
+    Pure function over an already-fetched candidate pool so the ranking rules can
+    be unit-tested without chroma or the embedding model.
+
+    Penalties multiply ``score`` only — never ``vec_sim`` — because SIM_THRESHOLD
+    gates the refusal path on raw vector similarity.
+    """
+    alpha = HYBRID_VECTOR_WEIGHT
+    boost = (lang_boost or "").split("-")[0].lower()
+    hits: list[Hit] = []
+    for v in pool.values():
+        if v["text"] is None:
+            continue
+        meta = v["meta"] or {}
+        score = alpha * v["vec_sim"] + (1 - alpha) * v["bm25_norm"]
+        lang = str(meta.get("lang", ""))
+        if boost and lang and lang.split("-")[0].lower() == boost:
+            score *= 1.05
+        if meta.get("link_only"):
+            score *= LINK_ONLY_PENALTY
+        score *= DOC_TYPE_WEIGHTS.get(str(meta.get("type", "")), 1.0)
+        hits.append(
+            Hit(
+                doc_id=v["doc_id"],
+                text=v["text"],
+                source=str(meta.get("source", "")),
+                section=str(meta.get("section", "")),
+                lang=lang,
+                score=score,
+                vec_sim=v["vec_sim"],
+                bm25_norm=v["bm25_norm"],
+                metadata=meta,
+            )
+        )
+
+    hits.sort(key=lambda h: -h.score)
+    # The CSV loader emits one Document per language column, so zh-TW and zh-CN
+    # rows with identical text become distinct doc_ids and used to occupy two
+    # TOP_K slots each. Sorting first means the survivor is the best-scoring one
+    # (and the lang_boost multiplier already favours the user's language).
+    deduped: list[Hit] = []
+    seen: set[str] = set()
+    for hit in hits:
+        key = _dedup_key(hit.text)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(hit)
+    return deduped[:top_k]
 
 
 class Retriever:
@@ -138,30 +207,4 @@ class Retriever:
                             pool[did]["text"] = doc
                             pool[did]["meta"] = meta or {}
 
-        hits: list[Hit] = []
-        alpha = HYBRID_VECTOR_WEIGHT
-        boost = (lang_boost or "").split("-")[0].lower()
-        for v in pool.values():
-            if v["text"] is None:
-                continue
-            score = alpha * v["vec_sim"] + (1 - alpha) * v["bm25_norm"]
-            meta = v["meta"] or {}
-            lang = str(meta.get("lang", ""))
-            if boost and lang and lang.split("-")[0].lower() == boost:
-                score *= 1.05
-            hits.append(
-                Hit(
-                    doc_id=v["doc_id"],
-                    text=v["text"],
-                    source=str(meta.get("source", "")),
-                    section=str(meta.get("section", "")),
-                    lang=lang,
-                    score=score,
-                    vec_sim=v["vec_sim"],
-                    bm25_norm=v["bm25_norm"],
-                    metadata=meta,
-                )
-            )
-
-        hits.sort(key=lambda h: -h.score)
-        return hits[:top_k]
+        return score_pool(pool, lang_boost=lang_boost, top_k=top_k)

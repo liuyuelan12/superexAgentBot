@@ -1,14 +1,15 @@
 {
-  "built_at": 1781233306,
+  "built_at": 1784672088,
   "sources": [
     "raw_customer_service",
     "raw_official_tutorial",
     "wiki"
   ],
-  "doc_count": 471,
+  "doc_count": 477,
   "files": {
     "/Users/ericc/Desktop/SuperEx/raw/客服/bitget/喂AI文档.md": "1b58f8a46c052dfd3191db6f31fd170123f5b190",
-    "/Users/ericc/Desktop/SuperEx/raw/客服/补充/customer-support-supplement.md": "69cb9a5fc16da9dd9982b949cb5bc592ca448454",
+    "/Users/ericc/Desktop/SuperEx/raw/客服/补充/customer-support-supplement.md": "1b253b88249bc8e26542de37d1b75131e272af89",
+    "/Users/ericc/Desktop/SuperEx/raw/客服/补充/fee-schedule.md": "92f7e6b81df84cb202846910ce6d28b16dfa10bb",
     "/Users/ericc/Desktop/SuperEx/raw/客服/补充/kb_gap_filled.csv": "13f2521a38438f2bbe606266dff9d6d958479ed2",
     "/Users/ericc/Desktop/SuperEx/raw/客服/superex/客服话术整理 - 官方社群文案翻译.csv": "90198b81e1d3e6f64367fe9276d9cdfa3e7d99d6",
     "/Users/ericc/Desktop/SuperEx/raw/官方教程/全币种合约/index_futures_tutorial.html": "207f3351171ede096cd585b7ec970fc2b197f271",
