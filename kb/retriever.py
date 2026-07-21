@@ -15,7 +15,9 @@ from config import (
     CHROMA_DIR,
     DOC_TYPE_WEIGHTS,
     EMBED_MODEL_NAME,
+    HELP_CENTER_LANGS,
     HYBRID_VECTOR_WEIGHT,
+    LANG_MISMATCH_PENALTY,
     LINK_ONLY_PENALTY,
     TOP_K,
 )
@@ -70,13 +72,23 @@ def score_pool(
         if v["text"] is None:
             continue
         meta = v["meta"] or {}
+        doc_type = str(meta.get("type", ""))
         score = alpha * v["vec_sim"] + (1 - alpha) * v["bm25_norm"]
         lang = str(meta.get("lang", ""))
-        if boost and lang and lang.split("-")[0].lower() == boost:
+        primary = lang.split("-")[0].lower()
+        if boost and lang and primary == boost:
             score *= 1.05
+        elif (
+            doc_type == "help_center"
+            and boost in HELP_CENTER_LANGS
+            and primary
+            and primary != boost
+        ):
+            # A same-language version of this article is known to exist.
+            score *= LANG_MISMATCH_PENALTY
         if meta.get("link_only"):
             score *= LINK_ONLY_PENALTY
-        score *= DOC_TYPE_WEIGHTS.get(str(meta.get("type", "")), 1.0)
+        score *= DOC_TYPE_WEIGHTS.get(doc_type, 1.0)
         hits.append(
             Hit(
                 doc_id=v["doc_id"],

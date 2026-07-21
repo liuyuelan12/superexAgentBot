@@ -164,6 +164,49 @@ def _load_official_tutorial(root: Path) -> list[Document]:
     return docs
 
 
+def _load_help_center(root: Path) -> list[Document]:
+    """Crawled Zendesk articles: frontmatter carries the provenance we must keep.
+
+    ``url`` and ``updated_at`` ride along in metadata so the conflict rule
+    ("官网 / 最新链接为准") can be applied at answer time, not just at ingest.
+    """
+    docs: list[Document] = []
+    if not root.exists():
+        return docs
+    for md in root.rglob("*.md"):
+        text = md.read_text(encoding="utf-8", errors="ignore")
+        frontmatter, body = _parse_frontmatter(text)
+        if not body.strip():
+            continue
+        extras: dict[str, str | int | float | bool] = {"authority": "official"}
+        for key in ("url", "updated_at", "created_at", "category", "section", "article_id"):
+            value = frontmatter.get(key)
+            if isinstance(value, (str, int, float, bool)) and value != "":
+                extras[key] = value
+        lang = str(frontmatter.get("lang") or _detect_lang(md))
+        sub = split_markdown_header_aware(
+            text=body,
+            source=relpath(md, REPO_ROOT),
+            lang=lang,
+            doc_type="help_center",
+            max_tokens=CHUNK_SIZE_TOKENS,
+            overlap_tokens=CHUNK_OVERLAP_TOKENS,
+        )
+        docs.extend(
+            Document(
+                text=d.text,
+                source=d.source,
+                lang=d.lang,
+                type=d.type,
+                section=str(frontmatter.get("title") or d.section),
+                extras={**d.extras, **extras},
+            )
+            for d in sub
+        )
+    logger.info("Help center -> %d docs", len(docs))
+    return docs
+
+
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
 
@@ -248,6 +291,8 @@ def load_all(sources: list[str] | None = None) -> list[Document]:
             docs.extend(_load_customer_service(root))
         elif key == "raw_official_tutorial":
             docs.extend(_load_official_tutorial(root))
+        elif key == "raw_help_center":
+            docs.extend(_load_help_center(root))
         elif key == "wiki":
             docs.extend(_load_wiki(root))
     logger.info("Total documents loaded: %d", len(docs))

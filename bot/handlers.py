@@ -52,16 +52,29 @@ def _strip_mention(text: str, bot_username: Optional[str]) -> str:
 
 
 def _format_hits(hits: list[Hit]) -> str:
+    """Render retrieved chunks, tagging provenance so the model can rank authority.
+
+    Official Help Center chunks carry `authority` and `updated_at`; surfacing them
+    lets the answer prompt apply the operator's rule — the official site and the
+    most recently updated source win when sources disagree.
+    """
     blocks: list[str] = []
     for i, hit in enumerate(hits, 1):
         if hit.metadata.get("type") == "wiki":
             cite = "[[%s]]" % hit.basename().rsplit(".", 1)[0]
         else:
             cite = hit.basename()
+        if hit.metadata.get("authority") == "official":
+            updated = str(hit.metadata.get("updated_at", ""))[:10]
+            trust = f"OFFICIAL, updated {updated}" if updated else "OFFICIAL"
+        else:
+            trust = "internal note"
         text = hit.text.strip()
         if len(text) > 1200:
             text = text[:1200] + " …"
-        blocks.append(f"[{i}] (source: {cite}) [{hit.lang or '-'}] {text}")
+        blocks.append(
+            f"[{i}] (source: {cite}) [{hit.lang or '-'}] [{trust}] {text}"
+        )
     return "\n\n".join(blocks)
 
 

@@ -16,10 +16,14 @@ load_dotenv(REPO_ROOT / ".env")
 
 RAW_DIR = REPO_ROOT / "raw"
 WIKI_DIR = REPO_ROOT / "wiki"
+OUTPUT_DIR = REPO_ROOT / "output"
+# Crawled from support.superex.com; see scripts/crawl_help_center.py.
+HELP_CENTER_DIR = RAW_DIR / "帮助中心"
 
 KB_SOURCES = {
     "raw_customer_service": RAW_DIR / "客服",
     "raw_official_tutorial": RAW_DIR / "官方教程",
+    "raw_help_center": HELP_CENTER_DIR,
     "wiki": WIKI_DIR,
 }
 
@@ -56,6 +60,17 @@ LINK_ONLY_PENALTY = 0.6
 # Social-media marketing copy is not a support answer; damp it below the FAQ
 # and tutorial sources. Types not listed here default to 1.0.
 DOC_TYPE_WEIGHTS: dict[str, float] = {"cs-script": 0.85}
+
+# The Help Center is crawled in 11 locales, and the same fact therefore exists as
+# 11 separate articles with distinct ids — text dedup cannot fold them together.
+# When the user's language is one we crawled, a same-language article is known to
+# exist, so demote the other translations instead of letting them eat TOP_K.
+# Languages outside this set (tr, ar, id, …) are exempt: cross-lingual retrieval
+# is the only way those users get an answer at all.
+HELP_CENTER_LANGS: frozenset[str] = frozenset(
+    {"en", "zh", "ru", "fa", "vi", "es", "fr", "ja", "ko", "pt", "uk"}
+)
+LANG_MISMATCH_PENALTY = 0.75
 
 ENABLE_WEAK_TRIGGER = False  # P0: off; P1: on
 

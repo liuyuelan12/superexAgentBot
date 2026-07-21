@@ -9,6 +9,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -167,6 +169,56 @@ def test_lang_boost_prefers_the_users_language():
         top_k=5,
     )
     assert hits[0].doc_id == "zh"
+
+
+# ── multilingual Help Center ───────────────────────────────────────────────────
+
+
+def test_other_locale_help_center_articles_are_demoted():
+    """The same fact exists as 11 separate articles; translations must not eat TOP_K."""
+    hits = score_pool(
+        pool(
+            candidate("ko", "수수료 안내", lang="ko", type="help_center", vec=0.72),
+            candidate("ja", "手数料について", lang="ja", type="help_center", vec=0.71),
+            candidate("zh", "手續費說明", lang="zh-TW", type="help_center", vec=0.66),
+        ),
+        lang_boost="zh",
+        top_k=5,
+    )
+    assert hits[0].doc_id == "zh"
+
+
+def test_language_penalty_only_applies_to_help_center():
+    """Curated sources exist in one language only — cross-lingual matching is wanted."""
+    hits = score_pool(
+        pool(
+            candidate("wiki_en", "fee info", lang="en", type="wiki", vec=0.70),
+            candidate("hc_en", "fee info page", lang="en", type="help_center", vec=0.70),
+        ),
+        lang_boost="zh",
+        top_k=5,
+    )
+    assert hits[0].doc_id == "wiki_en"
+
+
+def test_uncrawled_language_keeps_full_cross_lingual_reach():
+    """Turkish has no Help Center locale, so English must not be demoted for it."""
+    hits = score_pool(
+        pool(candidate("hc_en", "deposit guide", lang="en", type="help_center", vec=0.6)),
+        lang_boost="tr",
+        top_k=5,
+    )
+    assert hits[0].score == pytest.approx(0.7 * 0.6)
+
+
+def test_simplified_chinese_query_matches_traditional_articles():
+    """Router reports 'zh'; the crawl stores zh-TW. They must count as the same."""
+    hits = score_pool(
+        pool(candidate("hc", "提現說明", lang="zh-TW", type="help_center", vec=0.6)),
+        lang_boost="zh",
+        top_k=5,
+    )
+    assert hits[0].score == pytest.approx(0.7 * 0.6 * 1.05)
 
 
 def test_rows_without_text_are_skipped():
