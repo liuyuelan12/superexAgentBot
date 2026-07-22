@@ -13,6 +13,7 @@ from telegram.ext import (
 )
 
 from bot.handlers import AskHandler, on_help, on_start
+from bot.log_redaction import install_log_redaction, register_secret
 from config import load_runtime_config, load_secrets
 from kb.retriever import Retriever
 from llm.client import LLMClient
@@ -21,11 +22,20 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
     level=logging.INFO,
 )
+# Must run before anything logs: httpx prints the Telegram URL — token and all —
+# for every API call it makes.
+install_log_redaction()
+# httpx's per-request INFO lines are pure noise once the token is masked, and the
+# model-download chatter at startup buries the lines that matter.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("superex.agent.main")
 
 
 def build_app() -> Application:
     secrets = load_secrets()
+    # Backstop for anything that prints a raw value without the usual URL shape.
+    for secret in (secrets.bot_token, secrets.groq_api_key, secrets.deepseek_api_key):
+        register_secret(secret)
     runtime = load_runtime_config()
 
     try:

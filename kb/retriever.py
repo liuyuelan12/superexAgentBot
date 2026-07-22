@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from config import (
     BM25_PATH,
     CHROMA_COLLECTION,
@@ -187,36 +189,82 @@ class Retriever:
             q_tokens = tokenize(query)
             if q_tokens:
                 scores = self._bm25.get_scores(q_tokens)
-                bm25_top = sorted(
-                    enumerate(scores), key=lambda x: x[1], reverse=True
-                )[:widen]
-                max_score = bm25_top[0][1] if bm25_top else 0.0
-                missing_ids: list[str] = []
-                for pos, score in bm25_top:
-                    if score <= 0 or max_score <= 0:
-                        continue
-                    did = self._bm25_doc_ids[pos]
-                    norm = score / max_score
-                    if did in pool:
-                        pool[did]["bm25_norm"] = norm
-                    else:
+                max_score = float(max(scores)) if len(scores) else 0.0
+                if max_score > 0:
+                    # Give every pooled document its *true* score in both channels.
+                    #
+                    # Previously a document that only one channel surfaced kept 0.0 in
+                    # the other, which reads as "irrelevant" when it actually means
+                    # "outside that channel's top-N" — a very different claim. The
+                    # blend then buried it: the Chinese cross-margin rules rank 13th
+                    # in BM25 for an English question but 90th by vector, so they
+                    # scored 0.7*0.0 + 0.3*0.551 = 0.165 and never reached the model.
+                    #
+                    # Both true values are cheap: get_scores() already covers the whole
+                    # corpus, and the stored embeddings are normalised, so cosine
+                    # similarity is a dot product against the query vector.
+                    for did, entry in pool.items():
+                        pos = self._bm25_pos_by_id.get(did)
+                        if pos is not None:
+                            entry["bm25_norm"] = max(0.0, float(scores[pos]) / max_score)
+
+                    bm25_top = sorted(
+                        enumerate(scores), key=lambda x: x[1], reverse=True
+                    )[:widen]
+                    missing_ids: list[str] = []
+                    for pos, score in bm25_top:
+                        if score <= 0:
+                            continue
+                        did = self._bm25_doc_ids[pos]
+                        if did in pool:
+                            continue
                         missing_ids.append(did)
                         pool[did] = {
                             "doc_id": did,
                             "text": None,
                             "meta": None,
                             "vec_sim": 0.0,
-                            "bm25_norm": norm,
+                            "bm25_norm": max(0.0, float(score) / max_score),
                         }
-                if missing_ids:
-                    extra = self._collection.get(ids=missing_ids)
-                    for did, doc, meta in zip(
-                        extra.get("ids", []),
-                        extra.get("documents", []),
-                        extra.get("metadatas", []),
-                    ):
-                        if did in pool:
-                            pool[did]["text"] = doc
-                            pool[did]["meta"] = meta or {}
+                    if missing_ids:
+                        self._fill_from_store(pool, missing_ids, q_emb[0])
 
         return score_pool(pool, lang_boost=lang_boost, top_k=top_k)
+
+    def _fill_from_store(
+        self,
+        pool: dict[str, dict[str, Any]],
+        doc_ids: list[str],
+        query_vector: Any,
+    ) -> None:
+        """Load text, metadata and true vector similarity for BM25-only hits.
+
+        Without the embeddings these documents would keep ``vec_sim = 0.0``, which
+        both sinks their blended score and hides them from the SIM_THRESHOLD gate
+        that decides whether the bot answers at all.
+        """
+        try:
+            extra = self._collection.get(
+                ids=doc_ids, include=["documents", "metadatas", "embeddings"]
+            )
+        except Exception:  # noqa: BLE001 - retrieval must degrade, not fail
+            logger.warning("Could not load BM25-only hits from the store", exc_info=True)
+            return
+
+        embeddings = extra.get("embeddings")
+        for idx, did in enumerate(extra.get("ids", [])):
+            entry = pool.get(did)
+            if entry is None:
+                continue
+            documents = extra.get("documents") or []
+            metadatas = extra.get("metadatas") or []
+            if idx < len(documents):
+                entry["text"] = documents[idx]
+            if idx < len(metadatas):
+                entry["meta"] = metadatas[idx] or {}
+            if embeddings is None or idx >= len(embeddings):
+                continue
+            # Both sides are L2-normalised at index time, and the collection uses
+            # cosine space, so this matches the 1 - distance the vector path yields.
+            similarity = float(np.dot(query_vector, embeddings[idx]))
+            entry["vec_sim"] = max(0.0, min(1.0, similarity))

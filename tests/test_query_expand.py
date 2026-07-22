@@ -47,6 +47,19 @@ class TestCoverage:
             ("lost my 2fa authenticator", "谷歌验证器"),
             ("what is the referral rebate", "返佣"),
             ("how does copy trading work", "跟单"),
+            # gaps found by auditing the 83-question standard set
+            ("I forgot my login password", "密码"),
+            ("what is anti-phishing code", "钓鱼"),
+            ("how do I create and manage API keys", "API 密钥"),
+            ("I withdrew to the wrong address", "充错网络"),
+            ("how to buy or sell coins", "买币"),
+            ("difference between mark price and index price", "标记价格"),
+            ("what is the maintenance margin rate", "维持保证金"),
+            ("how do I contact human support", "客服"),
+            ("where can I see announcements and new listings", "公告"),
+            ("what is impermanent loss", "无常损失"),
+            ("how to connect my web3 wallet", "钱包"),
+            ("how do I change my bound email", "邮箱"),
         ],
     )
     def test_common_english_questions_reach_chinese_pages(self, query, expected):
@@ -76,6 +89,25 @@ class TestSafety:
     def test_short_trigger_does_not_fire_inside_another_word(self):
         # "et token" rather than "et", so "get"/"market"/"budget" stay quiet
         assert "平台币" not in expand_query("how do I get started")
+
+    @pytest.mark.parametrize(
+        "phrase",
+        [
+            "how do I get started",
+            "thanks a lot",
+            "good morning everyone",
+            "can you help me please",
+        ],
+    )
+    def test_chit_chat_is_not_expanded(self, phrase):
+        assert expand_query(phrase) == phrase
+
+    def test_triggers_avoid_the_known_substring_traps(self):
+        # bare "event" would fire inside "prevent"; bare "stake" inside "mistake";
+        # bare "api" inside "rapid" — each concept uses a longer form instead.
+        assert expand_query("prevent this") == "prevent this"
+        assert expand_query("that was a mistake") == "that was a mistake"
+        assert expand_query("rapid growth") == "rapid growth"
 
     def test_expansion_is_pure(self):
         query = "superex vip6 fee rate"

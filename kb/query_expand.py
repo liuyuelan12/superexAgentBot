@@ -57,7 +57,7 @@ class Concept:
 CONCEPTS: tuple[Concept, ...] = (
     Concept(
         triggers=("fee rate", "fee", "commission", "maker", "taker", "vip",
-                  "手续费", "费率", "等级"),
+                  "手续费", "费率", "费用", "等级"),
         zh=("手续费", "费率", "VIP 等级"),
         en=("fee", "rate", "maker", "taker"),
     ),
@@ -155,9 +155,104 @@ CONCEPTS: tuple[Concept, ...] = (
     ),
     Concept(
         triggers=("order", "limit", "market order", "stop loss", "take profit",
-                  "订单", "限价", "市价", "止盈", "止损"),
-        zh=("订单", "限价单", "市价单", "止盈止损"),
-        en=("order", "limit order", "market order", "stop loss"),
+                  "tp/sl", "reverse", "订单", "限价", "市价", "止盈", "止损",
+                  "撤单", "撤回", "下单"),
+        zh=("订单", "限价单", "市价单", "止盈止损", "下单"),
+        en=("order", "limit order", "market order", "stop loss", "take profit"),
+    ),
+    Concept(
+        triggers=("password", "密码"),
+        zh=("密码", "登录密码", "资金密码", "找回密码"),
+        en=("password", "login password", "fund password"),
+    ),
+    Concept(
+        triggers=("phishing", "scam", "fraud", "fake support", "钓鱼", "诈骗",
+                  "假客服", "举报"),
+        zh=("钓鱼", "诈骗", "防钓鱼码", "假客服"),
+        en=("phishing", "scam", "fraud", "anti-phishing code"),
+    ),
+    Concept(
+        triggers=("human support", "contact support", "customer service",
+                  "customer support", "complaint", "appeal", "ticket",
+                  "客服", "工单", "申诉", "投诉"),
+        zh=("客服", "人工客服", "工单", "申诉"),
+        en=("customer support", "support ticket", "complaint"),
+    ),
+    Concept(
+        triggers=("email", "phone", "bind", "binding", "bound", "邮箱",
+                  "手机号", "绑定"),
+        zh=("邮箱", "手机号", "绑定", "更改绑定"),
+        en=("email", "phone number", "change binding"),
+    ),
+    Concept(
+        triggers=("api key", "apikey", "api-key", "api 密钥", "api密钥", "密钥"),
+        zh=("API 密钥", "API 管理"),
+        en=("api key", "api management"),
+    ),
+    Concept(
+        triggers=("login alert", "unusual login", "device", "异地登录",
+                  "登录提醒", "设备"),
+        zh=("异地登录", "登录提醒", "设备管理"),
+        en=("login alert", "device management"),
+    ),
+    Concept(
+        triggers=("wrong address", "wrong chain", "wrong network", "充错",
+                  "提错", "地址错"),
+        zh=("充错网络", "地址错误", "资产找回"),
+        en=("wrong address", "wrong network", "recovery"),
+    ),
+    Concept(
+        triggers=("buy", "sell", "买币", "卖币"),
+        zh=("买币", "卖币", "下单"),
+        en=("buy", "sell"),
+    ),
+    Concept(
+        triggers=("trading pair", "pairs", "交易对"),
+        zh=("交易对", "币种"),
+        en=("trading pair", "listed coins"),
+    ),
+    Concept(
+        triggers=("k-line", "kline", "candlestick", "chart", "indicator",
+                  "k 线", "k线", "技术指标"),
+        zh=("K 线", "技术指标", "行情"),
+        en=("k-line", "chart", "indicator"),
+    ),
+    Concept(
+        triggers=("mark price", "index price", "last price", "标记价", "指数价",
+                  "最新价"),
+        zh=("标记价格", "指数价格", "最新价格"),
+        en=("mark price", "index price", "last price"),
+    ),
+    Concept(
+        triggers=("maintenance margin", "维持保证金"),
+        zh=("维持保证金", "维持保证金率"),
+        en=("maintenance margin", "maintenance margin rate"),
+    ),
+    Concept(
+        triggers=("campaign", "activity", "1usd", "活动", "体验金"),
+        zh=("活动", "活动中心", "体验金"),
+        en=("campaign", "activity", "trial bonus"),
+    ),
+    Concept(
+        triggers=("web3", "wallet", "钱包"),
+        zh=("钱包", "Web3 钱包"),
+        en=("web3 wallet", "wallet"),
+    ),
+    Concept(
+        triggers=("announcement", "listing", "new coin", "new token", "公告",
+                  "上新", "上币"),
+        zh=("公告", "上新币", "新币上线"),
+        en=("announcement", "new listing"),
+    ),
+    Concept(
+        triggers=("impermanent loss", "无常损失"),
+        zh=("无常损失",),
+        en=("impermanent loss",),
+    ),
+    Concept(
+        triggers=("to stake", "staking", "质押"),
+        zh=("质押", "理财"),
+        en=("stake", "staking"),
     ),
 )
 
