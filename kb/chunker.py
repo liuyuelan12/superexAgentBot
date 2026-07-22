@@ -43,6 +43,21 @@ _REFERRAL_PHRASES = (
 _LINK_ONLY_RESIDUE_CHARS = 40
 
 
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def strip_html_comments(text: str) -> str:
+    """Drop authoring notes so they never reach the model.
+
+    Curated raw pages carry maintenance notes — why a section exists, which
+    language is authoritative, what to keep in sync. They are for whoever edits
+    the file, not for the answering model: left in, they eat context on every
+    retrieval and dilute the chunk's embedding. One such note took up nearly
+    half of the cross-margin chunk.
+    """
+    return _HTML_COMMENT_RE.sub("", text)
+
+
 def is_link_only(text: str) -> bool:
     """True when a chunk carries a URL but essentially no answer of its own."""
     if not _URL_RE.search(text) and "【" not in text:
@@ -108,7 +123,7 @@ def split_markdown_header_aware(
     overlap_tokens: int = 50,
 ) -> list[Document]:
     """Split by ## headers; long sections get a sliding window."""
-    sections = H2_SPLIT.split(text)
+    sections = H2_SPLIT.split(strip_html_comments(text))
     docs: list[Document] = []
     for sec in sections:
         sec = sec.strip()
