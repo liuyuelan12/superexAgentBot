@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from bot.handlers import _format_hits  # noqa: E402
+from config import CONTEXT_SNIPPET_CHARS  # noqa: E402
 from kb.retriever import Hit  # noqa: E402
 
 
@@ -69,9 +70,9 @@ def test_wiki_sources_keep_wikilink_citation():
 
 
 def test_long_chunks_are_truncated():
-    out = _format_hits([hit("x" * 5000)])
+    out = _format_hits([hit("x" * (CONTEXT_SNIPPET_CHARS * 2))])
     assert "…" in out
-    assert len(out) < 1500
+    assert len(out) < CONTEXT_SNIPPET_CHARS + 300  # snippet plus the citation header
 
 
 def test_numbering_is_sequential():

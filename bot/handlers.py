@@ -14,6 +14,7 @@ from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from config import (
+    CONTEXT_SNIPPET_CHARS,
     ENABLE_WEAK_TRIGGER,
     MAX_CTX_TURNS,
     QA_LOG_PATH,
@@ -71,8 +72,16 @@ def _format_hits(hits: list[Hit]) -> str:
         else:
             trust = "internal note"
         text = hit.text.strip()
-        if len(text) > 1200:
-            text = text[:1200] + " …"
+        if len(text) > CONTEXT_SNIPPET_CHARS:
+            # Loud, because a clipped chunk turns into a wrong "I don't have that"
+            # rather than a visible failure.
+            logger.warning(
+                "Chunk from %s clipped at %d of %d chars; raise CONTEXT_SNIPPET_CHARS",
+                hit.basename(),
+                CONTEXT_SNIPPET_CHARS,
+                len(text),
+            )
+            text = text[:CONTEXT_SNIPPET_CHARS] + " …"
         blocks.append(
             f"[{i}] (source: {cite}) [{hit.lang or '-'}] [{trust}] {text}"
         )

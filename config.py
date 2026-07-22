@@ -44,6 +44,17 @@ SIM_THRESHOLD = 0.50
 HYBRID_VECTOR_WEIGHT = 0.7
 MAX_CTX_TURNS = 5
 
+# How much of a retrieved chunk reaches the model. This was 1200, which silently
+# clipped 51% of the corpus — every long chunk lost its tail. The VIP fee tables
+# run 1364 and 1385 characters, so VIP 9 fell off the end and the bot reported
+# that it only had "VIP levels 0 through 8" while the data was sitting in the
+# index. Truncating a table mid-row is worse than a longer prompt: the model is
+# told never to invent a figure, so a clipped row becomes a refusal.
+#
+# 3600 clears the longest chunk in the corpus (3454). Worst case is TOP_K * this,
+# which every model in use handles comfortably.
+CONTEXT_SNIPPET_CHARS = 3600
+
 ANSWER_MODEL = "llama-3.3-70b-versatile"
 ROUTER_MODEL = "llama-3.1-8b-instant"
 DEEPSEEK_MODEL = "deepseek-chat"
