@@ -57,11 +57,63 @@ _TOPIC_KEYWORDS = (
     ("leverage", ("杠杆", "槓桿", "leverage")),
     ("vip", ("vip", "等级", "等級", "tier")),
     ("funding", ("资金费", "資金費", "funding")),
-    ("liquidation", ("强平", "強平", "爆仓", "爆倉", "liquidation")),
+    (
+        "liquidation",
+        # 強制平倉 is the official phrasing and does not contain 強平 as a substring.
+        ("强平", "強平", "强制平仓", "強制平倉", "爆仓", "爆倉", "liquidation"),
+    ),
     ("kyc", ("kyc", "实名", "實名", "认证", "認證")),
     ("earn", ("理财", "理財", "年化", "apy", "earn")),
     ("rebate", ("返佣", "返傭", "rebate", "commission")),
 )
+
+
+# SuperEx ships several futures products whose rules legitimately differ, so a
+# numeric difference across products is not a conflict. Index Futures officially
+# liquidates at margin ratio ≤100% while USDT-margined perpetuals liquidate at
+# ≤0%; comparing them produced six confident false positives before this gate
+# existed. Same for leverage: 150x is a perpetuals figure, not an index-futures one.
+_PRODUCT_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("index_futures", ("全币种合约", "全幣種合約", "指数合约", "指數合約", "index futures")),
+    (
+        "perpetual",
+        ("永续合约", "永續合約", "u本位", "usdt-margined", "usdt margined", "perpetual"),
+    ),
+    ("bonus", ("体验金", "體驗金", "bonus", "trial fund")),
+    ("copy_trading", ("跟单", "跟單", "copy trading", "副本")),
+    ("free_market", ("free market", "自由区", "自由區", "amm")),
+    ("spot_grid", ("网格", "網格", "grid")),
+    ("earn", ("理财", "理財", "earn", "金融业务", "金融業務")),
+    ("p2p", ("p2p", "c2c")),
+    ("spot", ("现货", "現貨", "spot")),
+)
+
+
+def products_of(text: str) -> set[str]:
+    """Which SuperEx product(s) a chunk is about; empty when undetermined."""
+    lowered = text.lower()
+    return {name for name, words in _PRODUCT_KEYWORDS if any(w in lowered for w in words)}
+
+
+def product_of_document(doc: Document) -> set[str]:
+    """Product attribution from metadata only — never from the body.
+
+    Signals used: the file path, the document title, and (for crawled Help Center
+    chunks) the owning Zendesk section. "Leverage Multiplier and Margin" reads as
+    generic but lives under "USDT-Margined Perpetual Contracts", so its 150x
+    figure does not apply to Index Futures.
+
+    The body is deliberately excluded. A long Index Futures tutorial mentions
+    perpetuals in passing, which made its product set overlap everything and let
+    cross-product pairs through the gate — the exact false positives this
+    function exists to stop.
+    """
+    signals = " ".join(
+        str(part)
+        for part in (doc.source, doc.section, doc.extras.get("section") or "")
+        if part
+    )
+    return products_of(signals)
 
 
 @dataclass(frozen=True)
@@ -138,6 +190,34 @@ def _claims_by_unit(claims: Iterable[NumericClaim]) -> dict[str, list[NumericCla
     return out
 
 
+# Worked examples state numbers that are outputs of their own premises, not
+# platform parameters. "保證金合計 220 USDT" (案例三, 20 體驗金) and "保证金合计
+# 300 USDT" (案例二, 100 体验金) are both arithmetically correct for their own
+# case — flagging them as a parameter change would push someone to "fix" content
+# that is already right. A numeric comparator cannot tell cases apart, so
+# example blocks are excluded from comparison entirely.
+_EXAMPLE_MARKERS = (
+    "案例",
+    "举例",
+    "舉例",
+    "例如",
+    "示例",
+    "假设",
+    "假設",
+    "for example",
+    "example:",
+    "case ",
+    "scenario",
+    "e.g.",
+)
+
+
+def is_worked_example(text: str) -> bool:
+    """True when the text is an illustrative calculation rather than a rule."""
+    lowered = text.lower()
+    return any(marker in lowered for marker in _EXAMPLE_MARKERS)
+
+
 def _overlap(a: list[str], b: list[str]) -> float:
     """Jaccard overlap on token sets.
 
@@ -162,7 +242,14 @@ def find_candidates(
     """Pair official docs with existing ones and keep only numeric divergences."""
     from rank_bm25 import BM25Okapi
 
-    indexable = [d for d in old_docs if extract_claims(d.text)]
+    # The marker usually sits in a heading ("案例二：…"), not in the sentence
+    # carrying the number, so this has to be judged per chunk rather than per
+    # sentence. Rules quoted inside an example block are unreliable to compare
+    # anyway — precision matters more here, since every false positive invites
+    # someone to "correct" content that is already right.
+    indexable = [
+        d for d in old_docs if extract_claims(d.text) and not is_worked_example(d.text)
+    ]
     if not indexable:
         logger.warning("No numeric claims in the existing KB; nothing to compare")
         return []
@@ -172,11 +259,12 @@ def find_candidates(
     candidates: list[ConflictCandidate] = []
     for new in new_docs:
         new_claims = extract_claims(new.text)
-        if not new_claims:
+        if not new_claims or is_worked_example(new.text):
             continue
         new_topics = topics_of(new.text)
         if not new_topics:
             continue
+        new_products = product_of_document(new)
         new_tokens = tokenize(new.text)
         scores = bm25.get_scores(new_tokens)
         ranked = sorted(enumerate(scores), key=lambda x: -x[1])[:top_n]
@@ -189,6 +277,10 @@ def find_candidates(
             if not shared:
                 continue
             if _overlap(new_tokens, corpus[idx]) < min_overlap:
+                continue
+            # Different products may legitimately carry different values.
+            old_products = product_of_document(old)
+            if new_products and old_products and not (new_products & old_products):
                 continue
             old_by_unit = _claims_by_unit(extract_claims(old.text))
             new_by_unit = _claims_by_unit(new_claims)

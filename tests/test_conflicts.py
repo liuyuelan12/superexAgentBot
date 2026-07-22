@@ -9,7 +9,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from kb.conflicts import extract_claims, find_candidates, topics_of  # noqa: E402
+from kb.conflicts import (  # noqa: E402
+    extract_claims,
+    find_candidates,
+    is_worked_example,
+    products_of,
+    topics_of,
+)
 from kb.document import Document  # noqa: E402
 
 
@@ -135,6 +141,125 @@ def test_claim_sentences_must_share_the_topic_not_just_the_document():
         old_s = " ".join(x.sentence for x in c.old_claims)
         new_s = " ".join(x.sentence for x in c.new_claims)
         assert topics_of(old_s) & topics_of(new_s), "paired sentences must share a topic"
+
+
+# ── product gating ─────────────────────────────────────────────────────────────
+
+
+def test_product_detection():
+    assert "index_futures" in products_of("全幣種合約交易規則")
+    assert "index_futures" in products_of("Index Futures Trading Rules")
+    assert "perpetual" in products_of("USDT-Margined Perpetual Futures")
+    assert "perpetual" in products_of("永續合約介紹")
+    assert products_of("平台简介") == set()
+
+
+def test_index_futures_liquidation_is_not_a_conflict_with_perpetuals():
+    """Regression: the real corpus produced 6 confident false positives here.
+
+    Index Futures officially liquidates at margin ratio ≤100%; USDT-margined
+    perpetuals liquidate at ≤0%. Both are correct for their own product.
+    """
+    old = [
+        doc(
+            "Liquidation: when the margin ratio ≤ 100%, positions will trigger "
+            "forced liquidation.",
+            source="raw/官方教程/全币种合约/英文/Index Futures Trading Rules.md",
+        )
+    ]
+    new = [
+        doc(
+            "Forced Liquidation: if the margin rate is ≤ 0%, the position will be "
+            "forcefully liquidated.",
+            type="help_center",
+            lang="en",
+            source="raw/帮助中心/en-001/Futures Trading/x.md",
+            section="USDT-Margined Perpetual Contracts",
+        )
+    ]
+    assert find_candidates(old, new) == []
+
+
+def test_product_comes_from_metadata_not_body():
+    """Regression: a long Index Futures tutorial mentions perpetuals in passing.
+
+    Including the body made its product set overlap everything, so cross-product
+    pairs slipped past the gate.
+    """
+    old = [
+        doc(
+            "Configure your leverage (up to 50x). Perpetual futures are also available.",
+            source="raw/官方教程/全币种合约/index_futures_tutorial.html",
+        )
+    ]
+    new = [
+        doc(
+            "The leverage multiplier ranges from 1x to 150x.",
+            type="help_center",
+            lang="en",
+            source="raw/帮助中心/en-001/Futures Trading/x.md",
+            section="USDT-Margined Perpetual Contracts",
+        )
+    ]
+    assert find_candidates(old, new) == []
+
+
+def test_worked_examples_are_not_compared():
+    """Regression: 案例二 (100 体验金 -> 300) vs 案例三 (20 體驗金 -> 220).
+
+    Both are arithmetically correct for their own premises. Reporting them as a
+    parameter change would push someone to "fix" content that is already right.
+    """
+    old = [
+        doc(
+            "案例二：正常平仓——亏损\n自有资金 200 USDT\n体验金 100 USDT\n"
+            "杠杆：10x，开多，保证金合计 300 USDT",
+            source="raw/官方教程/体验金/superex-bonus.md",
+        )
+    ]
+    new = [
+        doc(
+            "案例三：正常平倉－虧損\n自有資金 200 USDT\n體驗金 20 USDT\n"
+            "槓桿：10x，開多，保證金合計 220 USDT",
+            type="help_center",
+            lang="zh-TW",
+            source="raw/帮助中心/zh-hk/合約交易/27708959832985-x.md",
+            section="USDT保證金永續合約",
+        )
+    ]
+    assert find_candidates(old, new) == []
+
+
+def test_example_detection_is_bilingual():
+    assert is_worked_example("案例二：正常平仓")
+    assert is_worked_example("For example, a 10x position")
+    assert is_worked_example("舉例說明")
+    assert not is_worked_example("提現手續費為 1 USDT")
+
+
+def test_same_product_divergence_is_still_reported():
+    old = [
+        doc(
+            "永續合約交易規則:強制平倉,當保證金率≤100%時觸發。",
+            source="raw/官方教程/永续合约.md",
+        )
+    ]
+    new = [
+        doc(
+            "永續合約交易規則:強制平倉,當保證金率≤0%時觸發。",
+            type="help_center",
+            lang="zh-TW",
+            source="raw/帮助中心/zh-hk/x.md",
+        )
+    ]
+    assert len(find_candidates(old, new)) == 1
+
+
+def test_unknown_product_does_not_block_comparison():
+    """Absence of a product marker must not silently drop real conflicts."""
+    old = [doc("提現手續費 1 USDT")]
+    new = [doc("提現手續費 2 USDT", type="help_center", lang="zh-TW")]
+    assert len(find_candidates(old, new)) == 1
 
 
 def test_overlapping_value_sets_are_treated_as_agreement():
