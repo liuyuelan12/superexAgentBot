@@ -28,6 +28,7 @@ from bot.handlers import _format_hits  # noqa: E402
 from bot.router import route  # noqa: E402
 from bot.telegram_format import md_to_telegram_html  # noqa: E402
 from config import MAX_CTX_TURNS, SIM_THRESHOLD, TOP_K  # noqa: E402
+from kb.query_expand import expand_query  # noqa: E402
 from kb.retriever import Retriever  # noqa: E402
 from llm.client import ChatMessage, LLMClient  # noqa: E402
 from llm.prompts import SYSTEM_ANSWER, refusal_for  # noqa: E402
@@ -45,8 +46,13 @@ async def preview(query: str, lang_override: str | None) -> None:
     hits_rew = []
     if decision.rewritten_query and decision.rewritten_query.strip() != query.strip():
         hits_rew = retriever.search(decision.rewritten_query, top_k=TOP_K, lang_boost=lang)
+    hits_exp = []
+    expanded = expand_query(decision.rewritten_query or query)
+    if expanded.strip() not in {query.strip(), (decision.rewritten_query or "").strip()}:
+        print(f"    expanded={expanded!r}")
+        hits_exp = retriever.search(expanded, top_k=TOP_K, lang_boost=lang)
     merged: dict = {}
-    for h in hits_orig + hits_rew:
+    for h in hits_orig + hits_rew + hits_exp:
         cur = merged.get(h.doc_id)
         if cur is None or cur.score < h.score:
             merged[h.doc_id] = h

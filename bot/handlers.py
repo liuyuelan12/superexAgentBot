@@ -22,6 +22,7 @@ from config import (
     TOP_K,
     RuntimeConfig,
 )
+from kb.query_expand import expand_query
 from kb.retriever import Hit, Retriever
 from llm.client import ChatMessage, LLMClient
 from llm.prompts import SYSTEM_ANSWER, refusal_for
@@ -179,8 +180,17 @@ class AskHandler:
             decision = await route(self._llm, query, history, assume_question=True)
 
         start = time.monotonic()
-        # Dual retrieval: original query + router-rewritten. Merge by doc_id keeping max score.
-        # Insurance against router LLM that over-translates and loses original-language keywords.
+        # Triple retrieval, merged by doc_id keeping max score:
+        #   1. the original query      — insurance against a router that over-translates
+        #                                and loses the original-language keywords;
+        #   2. the router rewrite      — filler stripped, synonyms added;
+        #   3. a bilingual expansion   — deterministic anchors so BM25 can reach
+        #                                documents written in the *other* language.
+        # (3) exists because the curated Chinese pages score bm25_norm = 0.0 against an
+        # English query and lose to lexically-matching English pages despite higher
+        # semantic similarity — see kb/query_expand.py for the measured numbers.
+        # Merging by max score means an extra pass can only add candidates, never
+        # depress an existing hit.
         hits_orig = self._retriever.search(
             query, top_k=TOP_K, lang_boost=decision.lang
         )
@@ -191,8 +201,14 @@ class AskHandler:
                 top_k=TOP_K,
                 lang_boost=decision.lang,
             )
+        hits_exp: list = []
+        expanded = expand_query(decision.rewritten_query or query)
+        if expanded.strip() not in {query.strip(), (decision.rewritten_query or "").strip()}:
+            hits_exp = self._retriever.search(
+                expanded, top_k=TOP_K, lang_boost=decision.lang
+            )
         merged: dict = {}
-        for h in hits_orig + hits_rew:
+        for h in hits_orig + hits_rew + hits_exp:
             existing = merged.get(h.doc_id)
             if existing is None or existing.score < h.score:
                 merged[h.doc_id] = h
@@ -201,12 +217,13 @@ class AskHandler:
         top_score = hits[0].score if hits else 0.0
 
         logger.info(
-            "ask trigger=%s lang=%s top_vec=%.3f q=%r rew=%r hits=%s",
+            "ask trigger=%s lang=%s top_vec=%.3f q=%r rew=%r exp=%r hits=%s",
             triggered_by,
             decision.lang,
             top_vec,
             query[:120],
             (decision.rewritten_query or "")[:120],
+            expanded[:120],
             [
                 f"{h.basename()[:30]}|sec={h.section[:25]}|{h.lang}|s={h.score:.2f}/v={h.vec_sim:.2f}"
                 for h in hits[:5]
