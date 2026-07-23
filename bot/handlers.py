@@ -25,6 +25,12 @@ from config import (
 )
 from kb.query_expand import expand_query
 from kb.retriever import Hit, Retriever
+
+from .prices import (
+    PriceService,
+    detect_price_intent,
+    format_price_answer,
+)
 from llm.client import ChatMessage, LLMClient
 from llm.prompts import SYSTEM_ANSWER, refusal_for
 
@@ -152,10 +158,12 @@ class AskHandler:
         llm: LLMClient,
         retriever: Retriever,
         runtime: RuntimeConfig,
+        prices: Optional[PriceService] = None,
     ) -> None:
         self._llm = llm
         self._retriever = retriever
         self._runtime = runtime
+        self._prices = prices or PriceService()
 
     def _chat_allowed(self, chat_id: int, chat_type: str) -> bool:
         if chat_type == ChatType.PRIVATE:
@@ -189,6 +197,36 @@ class AskHandler:
             decision = await route(self._llm, query, history, assume_question=True)
 
         start = time.monotonic()
+
+        # Real-time price questions must never touch the static index — it once
+        # answered "BTC = 100000" from a help-center worked example. Detect on the
+        # original text (the router rewrite may translate away the coin name), and
+        # short-circuit to the live feed. detect_price_intent excludes fee, mark/
+        # index price, funding, liquidation, chart and prediction questions so
+        # those still go to RAG.
+        price_intent = detect_price_intent(query)
+        if price_intent is not None:
+            results = await self._prices.get_prices(list(price_intent.symbols))
+            answer = format_price_answer(results, decision.lang)
+            await _reply_long(msg, answer)
+            _log_qa(
+                {
+                    "ts": int(time.time()),
+                    "chat_id": msg.chat.id,
+                    "chat_type": str(msg.chat.type),
+                    "user_id": msg.from_user.id if msg.from_user else None,
+                    "triggered_by": triggered_by,
+                    "query": query,
+                    "lang": decision.lang,
+                    "answered": True,
+                    "reason": "price_tool",
+                    "coins": list(price_intent.symbols),
+                    "price_sources": [r.source for r in results],
+                    "latency_ms": int((time.monotonic() - start) * 1000),
+                }
+            )
+            return
+
         # Triple retrieval, merged by doc_id keeping max score:
         #   1. the original query      — insurance against a router that over-translates
         #                                and loses the original-language keywords;

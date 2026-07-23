@@ -59,6 +59,17 @@ ANSWER_MODEL = "llama-3.3-70b-versatile"
 ROUTER_MODEL = "llama-3.1-8b-instant"
 DEEPSEEK_MODEL = "deepseek-chat"
 
+# Real-time price lookup. Price questions bypass the static index entirely — the
+# index once answered "BTC = 100000" from a help-center worked example — and hit
+# a live aggregator instead. CoinGecko is the primary source (neutral, no key);
+# Binance is a reliability fallback only. SuperEx-native tokens (ET) have no
+# aggregator coverage and are pointed at the live SuperEx page.
+COINGECKO_BASE = "https://api.coingecko.com/api/v3"
+BINANCE_BASE = "https://api.binance.com"
+PRICE_CACHE_TTL = 45.0  # seconds; a support bot does not need tick-level freshness
+PRICE_HTTP_TIMEOUT = 6.0  # keep the bot responsive if a feed is slow
+SUPEREX_MARKETS_URL = "https://www.superex.com/markets"
+
 TELEGRAM_MAX_MESSAGE_LEN = 4000
 # Split the markdown source below the hard limit: converting to HTML adds tags,
 # so a 4000-char source can exceed Telegram's 4096-char ceiling once rendered.
