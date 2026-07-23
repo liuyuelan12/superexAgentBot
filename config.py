@@ -61,13 +61,15 @@ DEEPSEEK_MODEL = "deepseek-chat"
 
 # Real-time price lookup. Price questions bypass the static index entirely — the
 # index once answered "BTC = 100000" from a help-center worked example — and hit
-# a live aggregator instead. CoinGecko is the primary source (neutral, no key);
-# Binance is a reliability fallback only. SuperEx-native tokens (ET) have no
-# aggregator coverage and are pointed at the live SuperEx page.
+# a live feed instead. Primary source is SuperEx's own public market API, so the
+# bot quotes exactly what users see on the platform and covers all ~710 listed
+# pairs including ET. CoinGecko and Binance are reliability fallbacks only.
+SUPEREX_API_BASE = "https://api.superex.com"
+SUPEREX_SUMMARY_PATH = "/spot/public/v3/summary"  # all pairs, no auth
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 BINANCE_BASE = "https://api.binance.com"
 PRICE_CACHE_TTL = 45.0  # seconds; a support bot does not need tick-level freshness
-PRICE_HTTP_TIMEOUT = 6.0  # keep the bot responsive if a feed is slow
+PRICE_HTTP_TIMEOUT = 8.0  # the full-summary payload takes ~2.5s; leave headroom
 SUPEREX_MARKETS_URL = "https://www.superex.com/markets"
 
 TELEGRAM_MAX_MESSAGE_LEN = 4000

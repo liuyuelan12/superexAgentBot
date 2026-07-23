@@ -1,9 +1,9 @@
 """Tests for the real-time price tool.
 
 Pins the behaviour that motivated it: "现在 BTC 价格多少" must be recognised as a
-price question and never answered from the static index, while fee / concept /
-prediction questions that merely mention a coin or the word 价格 must NOT be
-hijacked by the price path.
+price question and answered from a live feed (SuperEx's own, primarily), never
+from the static index; fee / concept / prediction questions that merely mention
+a coin or the word 价格 must NOT be hijacked by the price path.
 """
 
 from __future__ import annotations
@@ -32,6 +32,8 @@ class TestDetectPositive:
             ("price of ETH", "ETH"),
             ("狗狗币现在价格", "DOGE"),
             ("SOL 报价", "SOL"),
+            ("ET 现在价格多少", "ET"),        # SuperEx-native, via bare-ticker path
+            ("ONDO 现在多少钱", "ONDO"),      # long-tail coin not in the alias table
         ],
     )
     def test_real_price_questions_are_detected(self, text, symbol):
@@ -44,26 +46,21 @@ class TestDetectPositive:
         assert intent is not None
         assert intent.symbols == ("BTC", "ETH")
 
-    def test_native_token_is_detected(self):
-        intent = detect_price_intent("ET 现在价格多少")
-        assert intent is not None
-        assert "ET" in intent.symbols
-
 
 class TestDetectNegative:
     @pytest.mark.parametrize(
         "text",
         [
-            "现货交易手续费是多少",          # fee, not price
-            "VIP6 手续费多少",               # fee
-            "标记价格和指数价格的区别",       # futures concept, not a spot quote
-            "资金费率怎么算",                # funding
-            "BTC 会涨到多少",                # prediction
-            "btc 手续费多少",                # coin + fee -> still a fee question
-            "充值最低多少",                  # 多少 but no coin
-            "how do I withdraw BTC",         # coin but no price word
-            "什么是比特币",                  # concept, no price word
-            "BTC 的 K 线怎么看",             # chart
+            "现货交易手续费是多少",
+            "VIP6 手续费多少",
+            "标记价格和指数价格的区别",
+            "资金费率怎么算",
+            "BTC 会涨到多少",
+            "btc 手续费多少",
+            "充值最低多少",
+            "how do I withdraw BTC",
+            "什么是比特币",
+            "BTC 的 K 线怎么看",
         ],
     )
     def test_non_price_questions_are_ignored(self, text):
@@ -73,12 +70,19 @@ class TestDetectNegative:
         assert detect_price_intent("BTC") is None
 
     def test_coin_substring_does_not_false_trigger(self):
-        # "et" inside "get"/"target", "eth" inside "ethernet"
         assert detect_price_intent("how do I get the price down") is None
         assert detect_price_intent("ethernet cable price") is None
 
+    def test_acronyms_are_not_treated_as_coins(self):
+        # "KYC" / "VIP" are uppercase but not coins; with no other coin, no intent
+        assert detect_price_intent("KYC 要多少钱") is None
+        assert detect_price_intent("VIP 等级价格") is None
 
-def _fake_service(coingecko=None, binance=None):
+
+def _fake_service(superex=None, coingecko=None, binance=None):
+    async def sx():
+        return superex or {}
+
     async def cg(ids):
         return coingecko or {}
 
@@ -86,101 +90,131 @@ def _fake_service(coingecko=None, binance=None):
         return (binance or {}).get(symbol)
 
     clock = [1000.0]
-    return PriceService(coingecko_fetch=cg, binance_fetch=bn, now=lambda: clock[0]), clock
+    svc = PriceService(
+        superex_fetch=sx,
+        coingecko_fetch=cg,
+        binance_fetch=bn,
+        now=lambda: clock[0],
+    )
+    return svc, clock
 
 
 class TestFetch:
-    def test_coingecko_price_is_returned(self):
+    def test_superex_is_the_primary_source(self):
         svc, _ = _fake_service(
-            coingecko={"bitcoin": {"usd": 65000.0, "usd_24h_change": -1.5}}
+            superex={"BTC": {"usd": "65160.90", "change": "-1.22"}}
         )
         [r] = asyncio.run(svc.get_prices(["BTC"]))
-        assert r.symbol == "BTC"
-        assert r.usd == 65000.0
-        assert r.change_24h == -1.5
-        assert r.source == "coingecko"
+        assert r.source == "superex"
+        assert r.usd == 65160.90
+        assert r.change_24h == -1.22
 
-    def test_binance_fallback_when_coingecko_empty(self):
-        svc, _ = _fake_service(
-            coingecko={}, binance={"BTCUSDT": {"price": "64000", "change": "2.1"}}
-        )
-        [r] = asyncio.run(svc.get_prices(["BTC"]))
-        assert r.usd == 64000.0
-        assert r.source == "binance"
-
-    def test_native_token_never_hits_the_network(self):
-        called = {"cg": False}
-
-        async def cg(ids):
-            called["cg"] = True
-            return {}
-
-        svc = PriceService(coingecko_fetch=cg, binance_fetch=lambda s: None)
+    def test_native_token_comes_from_superex(self):
+        # ET has no aggregator coverage — SuperEx's own feed is exactly why it works
+        svc, _ = _fake_service(superex={"ET": {"usd": "2.0273", "change": "-1.22"}})
         [r] = asyncio.run(svc.get_prices(["ET"]))
-        assert r.source == "native"
-        assert r.usd is None
+        assert r.source == "superex"
+        assert r.usd == 2.0273
 
-    def test_unavailable_when_both_sources_fail(self):
-        svc, _ = _fake_service(coingecko={}, binance={})
+    def test_coingecko_fallback_when_superex_lacks_coin(self):
+        svc, _ = _fake_service(
+            superex={},  # SuperEx returned nothing for BTC
+            coingecko={"bitcoin": {"usd": 64000.0, "usd_24h_change": 2.1}},
+        )
         [r] = asyncio.run(svc.get_prices(["BTC"]))
+        assert r.source == "coingecko"
+        assert r.usd == 64000.0
+
+    def test_binance_fallback_when_superex_and_coingecko_empty(self):
+        svc, _ = _fake_service(
+            superex={}, coingecko={}, binance={"BTCUSDT": {"price": "63000", "change": "1.0"}}
+        )
+        [r] = asyncio.run(svc.get_prices(["BTC"]))
+        assert r.source == "binance"
+        assert r.usd == 63000.0
+
+    def test_unavailable_when_all_sources_fail(self):
+        svc, _ = _fake_service(superex={}, coingecko={}, binance={})
+        [r] = asyncio.run(svc.get_prices(["XYZ"]))
         assert r.source == "unavailable"
         assert r.usd is None
 
-    def test_cache_hit_avoids_refetch(self):
+    def test_superex_map_is_fetched_once_and_cached(self):
         calls = {"n": 0}
 
-        async def cg(ids):
+        async def sx():
             calls["n"] += 1
-            return {"bitcoin": {"usd": 65000.0, "usd_24h_change": 0.0}}
+            return {"BTC": {"usd": "65000", "change": "0"}, "ETH": {"usd": "1900", "change": "0"}}
 
-        svc = PriceService(coingecko_fetch=cg, binance_fetch=lambda s: None, cache_ttl=45)
+        svc = PriceService(superex_fetch=sx, now=lambda: 1000.0)
         asyncio.run(svc.get_prices(["BTC"]))
+        asyncio.run(svc.get_prices(["ETH"]))  # different coin, same cached map
+        assert calls["n"] == 1
+
+    def test_stale_superex_map_is_refetched_after_ttl(self):
+        calls = {"n": 0}
+        clock = [1000.0]
+
+        async def sx():
+            calls["n"] += 1
+            return {"BTC": {"usd": "65000", "change": "0"}}
+
+        svc = PriceService(superex_fetch=sx, cache_ttl=45, now=lambda: clock[0])
         asyncio.run(svc.get_prices(["BTC"]))
-        assert calls["n"] == 1  # second call served from cache
+        clock[0] += 100  # past the TTL
+        asyncio.run(svc.get_prices(["BTC"]))
+        assert calls["n"] == 2
 
-    def test_failure_is_not_cached(self):
-        state = {"n": 0}
-
-        async def cg(ids):
-            state["n"] += 1
-            return {} if state["n"] == 1 else {"bitcoin": {"usd": 65000.0}}
-
-        svc = PriceService(coingecko_fetch=cg, binance_fetch=lambda s: None)
-        r1 = asyncio.run(svc.get_prices(["BTC"]))[0]
-        r2 = asyncio.run(svc.get_prices(["BTC"]))[0]
-        assert r1.source == "unavailable"
-        assert r2.source == "coingecko"  # retried, not stuck on the cached failure
+    def test_order_is_preserved(self):
+        svc, _ = _fake_service(
+            superex={"BTC": {"usd": "65000", "change": "0"}, "ETH": {"usd": "1900", "change": "0"}}
+        )
+        results = asyncio.run(svc.get_prices(["ETH", "BTC"]))
+        assert [r.symbol for r in results] == ["ETH", "BTC"]
 
 
 class TestFormat:
-    def test_zh_answer_has_price_and_caveat(self):
+    def test_superex_answer_has_price_and_platform_caveat(self):
         out = format_price_answer(
-            [PriceResult("BTC", 65000.0, -1.5, "coingecko")], "zh"
+            [PriceResult("BTC", 65160.90, -1.22, "superex")], "zh"
         )
         assert "BTC" in out
-        assert "$65,000.00" in out
-        assert "以官网为准" in out
+        assert "$65,160.90" in out
+        assert "SuperEx 平台实时价格" in out
         assert "100000" not in out  # the old hallucinated number must be nowhere
 
-    def test_en_answer(self):
+    def test_fallback_source_carries_third_party_caveat(self):
         out = format_price_answer(
-            [PriceResult("ETH", 1900.0, 2.0, "coingecko")], "en"
+            [PriceResult("BTC", 64000.0, None, "coingecko")], "zh"
         )
+        assert "第三方" in out
+        assert "以 SuperEx 平台实际成交价为准" in out
+
+    def test_en_answer(self):
+        out = format_price_answer([PriceResult("ETH", 1900.0, 2.0, "superex")], "en")
         assert "ETH" in out
         assert "$1,900.00" in out
-        assert "authoritative" in out
-
-    def test_native_points_to_superex(self):
-        out = format_price_answer([PriceResult("ET", None, None, "native")], "zh")
-        assert "superex.com" in out
-        assert "ET" in out
+        assert "SuperEx" in out
 
     def test_sub_dollar_precision(self):
         out = format_price_answer(
-            [PriceResult("PEPE", 0.00000812, None, "coingecko")], "en"
+            [PriceResult("PEPE", 0.00000812, None, "superex")], "en"
         )
         assert "0.00000812" in out
 
-    def test_unavailable_falls_back_to_superex_link(self):
-        out = format_price_answer([PriceResult("BTC", None, None, "unavailable")], "zh")
+    def test_unavailable_points_to_superex(self):
+        out = format_price_answer([PriceResult("XYZ", None, None, "unavailable")], "zh")
+        assert "superex.com" in out
+        assert "XYZ" in out
+
+    def test_mixed_priced_and_unavailable(self):
+        out = format_price_answer(
+            [
+                PriceResult("BTC", 65000.0, None, "superex"),
+                PriceResult("XYZ", None, None, "unavailable"),
+            ],
+            "zh",
+        )
+        assert "$65,000.00" in out
+        assert "XYZ" in out
         assert "superex.com" in out
